@@ -1,0 +1,25 @@
+\input{settings/preamble.tex}
+
+\begin{document}
+
+\includepdf[pages={1-1}]{extra/title.pdf}
+
+\newpage
+\renewcommand{\contentsname}{\centerline{\large Содержание}}
+\tableofcontents
+
+\setcounter{page}{2}
+
+\input{chapters/problem.tex}
+
+\input{chapters/solution.tex}
+
+\input{chapters/results.tex}
+
+% \input{chapters/test.tex}
+
+% \input{chapters/legacy.tex}
+
+\input{chapters/bibliography.tex}
+
+\end{document}

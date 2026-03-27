@@ -1,0 +1,61 @@
+\newpage
+\begin{center}
+	\textbf{\large 5. Инструкция по установке}
+\end{center}
+% \refstepcounter{chapter}
+\addcontentsline{toc}{chapter}{5. Инструкция по установке}
+
+\paragraph{Установка.}
+Для сборки и запуска приложения требуется:
+\begin{itemize}
+	\item компилятор с поддержкой C++17;
+	\item CMake версии не ниже 3.15;
+	\item OpenCV версии 4.x;
+	\item библиотека \texttt{nlohmann\_json}.
+\end{itemize}
+
+Исходный код проекта размещён в репозитории GitHub:
+\begin{verbatim}
+https://github.com/g0lubew-iv/qr-localizer
+\end{verbatim}
+
+Для загрузки проекта необходимо клонировать репозиторий и перейти в его директорию:
+\begin{verbatim}
+git clone https://github.com/g0lubew-iv/qr-localizer
+cd qr-localizer
+\end{verbatim}
+
+\subsection*{Сборка (Linux/MacOS)}
+\paragraph{Шаг 1. Установка зависимостей.}
+Установите OpenCV и \texttt{nlohmann\_json} средствами пакетного менеджера вашей системы или с помощью менеджера зависимостей (например, vcpkg).
+При использовании Fedora Linux установка может быть выполнена командой:
+\begin{verbatim}
+sudo dnf install opencv-devel nlohmann-json-devel
+\end{verbatim}
+
+\paragraph{Шаг 2. Конфигурация проекта.}
+Из корневой директории проекта выполните:
+\begin{verbatim}
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+\end{verbatim}
+
+\paragraph{Шаг 3. Сборка.}
+\begin{verbatim}
+cmake --build build --config Release
+\end{verbatim}
+
+\paragraph{Шаг 4. Установка.}
+При необходимости можно установить бинарный файл в системный префикс:
+\begin{verbatim}
+cmake --install build
+\end{verbatim}
+
+\subsection*{Сборка (Windows)}
+Сборка под Windows выполняется аналогично с использованием генератора Visual Studio.
+Общий подход к конфигурации/сборке/установке для CMake-проектов выполняется по следующей схеме:
+\begin{verbatim}
+cmake -S . -B build
+cmake --build build --config Release
+cmake --install build --config Release
+\end{verbatim}
+При использовании vcpkg необходимо дополнительно указать путь к toolchain-файлу \texttt{vcpkg.cmake} в параметре \verb|-DCMAKE_TOOLCHAIN_FILE=...|.

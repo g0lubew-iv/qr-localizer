@@ -1,0 +1,203 @@
+\newpage
+\begin{center}
+	\textbf{\large 2. Способ решения}
+\end{center}
+\refstepcounter{chapter}
+\addcontentsline{toc}{chapter}{2. Способ решения}
+
+\subsubsection{Определения и обозначения.}
+Пусть входное изображение задано как матрица яркости $I(x, y)$ (для цветного изображения предварительно выполняется преобразование в оттенки серого).
+Требуется определить четыре точки
+\[
+	Q = \{q_{TL};\ q_{TR};\ q_{BR};\ q_{BL}\},
+\]
+где $q_{TL}=(x_{TL}, y_{TL})$ -- верхняя левая вершина, далее вершины перечисляются по часовой стрелке.
+
+Для оценки качества локализации применяются:
+\begin{itemize}
+	\item IoU (Intersection over Union) -- отношение площади пересечения двух многоугольников (предсказанного и разметки) к площади объединения;
+	\item средняя ошибка по углам:
+	      $$ e_{mean}=\frac{1}{4}\sum_{i=1}^{4} \|q_i - q_i^{GT}\| $$
+	\item максимальная ошибка по углам:
+	      $$ e_{max}=\max_{i\in\{1,2,3,4\}} \|q_i - q_i^{GT}\| $$
+\end{itemize}
+
+\subsubsection{Идея решения}
+В основе идеи решения задачи лежит структурная особенность QR-кода: наличие трёх угловых маркеров (finder patterns), расположенных в углах \texttt{TL}, \texttt{TR} и \texttt{BL}.
+Finder pattern представляет собой квадрат с вложенной структурой <<чёрный--белый--чёрный>>, что позволяет устойчиво выделять его на бинарном изображении по контурам и иерархии вложенности.
+Далее по положениям и размерам найденных finder patterns восстанавливаются границы всего QR-кода (без \textit{quiet zone}) в виде четырёх вершин многоугольника.
+
+\subsubsection{Шаг 1. Перевод в оттенки серого и уменьшение масштаба}
+Входное изображение переводится в оттенки серого.
+Для уменьшения вычислительной сложности при обработке изображений большого разрешения применяется уменьшение масштаба так, чтобы максимальная сторона изображения не превышала заданного значения $M$ (параметр \texttt{targetMax}).
+Уменьшение выполняется интерполяцией \texttt{INTER\_AREA}, которая обеспечивает устойчивый даунскейл и уменьшает алиасинг.
+
+На рис.~\ref{fig:step_gray} приведён пример изображения после преобразования в оттенки серого (метод OpenCV \verb|cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY)|).
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.45\textwidth]{gray.png}
+	\caption{Изображение в оттенках серого}
+	\label{fig:step_gray}
+\end{figure}
+
+\subsubsection{Шаг 2. Сглаживание и бинаризация (Otsu)}\label{sec:solution:step2}
+Для подавления шума и упрощения выделения контуров применяется гауссово сглаживание:
+
+$$ I_{blur} = G_\sigma * I $$
+
+\begin{figure}[!h]
+	\begin{center}
+		\includegraphics[width=0.45\textwidth]{im09-1.png}
+		\caption{Сглаженное изображение}
+		\label{nmp11}
+	\end{center}
+\end{figure}
+
+После сглаживания выполняется бинаризация методом Отсу:
+
+$$
+	I_{bin}(x,y)=
+	\begin{cases}
+		255, & I_{blur}(x,y)\ge T_{otsu}, \\
+		0,   & I_{blur}(x,y)<T_{otsu}.
+	\end{cases}
+$$
+
+\begin{figure}[!h]
+	\begin{center}
+		\includegraphics[width=0.45\textwidth]{im09-2.png}
+		\caption{Бинаризованное изображение}
+		\label{nmp12}
+	\end{center}
+\end{figure}
+
+Чтобы повысить устойчивость к выбору полярности (когда после порога <<объект>> может оказаться белым или чёрным), кандидаты finder patterns ищутся как на $I_{bin}$, так и на его инверсии $I_{bin}$.
+
+\paragraph{Параметры:}
+\begin{itemize}
+	\item Размер ядра Gaussian blur: \texttt{5$\times$5};
+	\item Бинаризация: \texttt{THRESH\_BINARY | THRESH\_OTSU}.
+\end{itemize}
+
+\subsubsection{Шаг 3. Поиск контуров и построение иерархии вложенности}
+На бинарном изображении выполняется поиск контуров:
+
+$$
+	\texttt{findContours}(I_{bin}, \texttt{RETR\_TREE}, \texttt{CHAIN\_APPROX\_SIMPLE})
+$$
+
+Режим \texttt{RETR\_TREE} строит дерево вложенности контуров.
+Для каждого контура доступна информация об индексах: \texttt{next}, \texttt{prev}, \texttt{first\_child}, \texttt{parent}.
+Finder pattern содержит вложенную структуру (минимум два уровня внутренних контуров), поэтому рассматриваются только контуры, имеющие ребёнка и внука:
+
+$$
+	child(i)\neq -1 \;\wedge\; child(child(i))\neq -1.
+$$
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.45\textwidth]{im09-4.png}
+	\caption{Все найденные контуры на бинарном изображении}
+	\label{fig:step_contours}
+\end{figure}
+
+\subsubsection{Шаг 4. Фильтрация кандидатов на finder patterns по геометрии}
+Для каждого контура, прошедшего проверку вложенности, выполняются геометрические проверки:
+\begin{itemize}
+	\item Аппроксимация контура полигоном \texttt{approxPolyDP};
+	\item Требование четырёх вершин и выпуклости;
+	\item Проверка близости углов к прямым (через модуль косинуса угла);
+	\item Ограничение на отношение сторон (должен быть близок к квадрату).
+\end{itemize}
+
+Для кандидата вычисляются:
+\begin{itemize}
+	\item Центр (\texttt{minAreaRect.center});
+	\item Размер стороны $F$ (минимальная из \texttt{width} и \texttt{height} для \texttt{minAreaRect}).
+\end{itemize}
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.45\textwidth]{im09-5.png}
+	\caption{Кандидаты на finder patterns после геометрической фильтрации}
+	\label{fig:step_finder_candidates}
+\end{figure}
+
+\subsubsection{Шаг 5. Выбор тройки finder patterns (TL, TR, BL)}
+Из множества кандидатов выбирается тройка, соответствующая структуре QR-кода.
+Для каждой тройки рассматривается геометрический критерий:
+
+\begin{enumerate}
+	\item среди трёх точек выбирается вершина, угол при которой максимально близок к $90^\circ$ (кандидат \texttt{TL});
+	\item проверяется согласованность расстояний от \texttt{TL} до двух остальных точек (стороны QR не должны отличаться на порядок);
+	\item вычисляется итоговая оценка (score), объединяющая близость к прямому углу и штраф за несоответствие длин.
+\end{enumerate}
+
+\paragraph{Оценка угла:}
+Для точки $P$ и двух других точек $Q$, $R$ вычисляется:
+\[
+	\cos\theta = \frac{(Q-P)\cdot(R-P)}{\|Q-P\|\;\|R-P\|},
+\]
+а в качестве ошибки используется величина $|\cos\theta|$ (для прямого угла $\theta=90^\circ$ и $|\cos\theta|\approx 0$).
+
+\paragraph{Итоговый score:}
+Пусть $d_1=\|P-Q\|$, $d_2=\|P-R\|$, тогда:
+\[
+	ratio=\frac{\max(d_1,d_2)}{\min(d_1,d_2)},\qquad
+	score = |\cos\theta| + \lambda\cdot(ratio-1),
+\]
+где $\lambda$ --- весовой коэффициент (использовалось $\lambda=0.25$).
+
+\paragraph{Определение TR и BL:}
+После выбора \texttt{TL} две оставшиеся точки назначаются как \texttt{TR} и \texttt{BL} по знаку векторного произведения в системе координат изображения ($x$ вправо, $y$ вниз).
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.45\textwidth]{im09-6.png}
+	\caption{Выбранная тройка finder patterns}
+	\label{fig:step_best_triple}
+\end{figure}
+
+\subsubsection{Шаг 6. Восстановление внешней границы QR-кода}
+После определения центров finder patterns $c_{TL}$, $c_{TR}$, $c_{BL}$ и оценки размера finder $F$ восстанавливаются границы QR-кода.
+
+Используется свойство QR-кода: finder pattern имеет размер $7\times7$ модулей, а его центр расположен на расстоянии $3.5$ модуля от внешней границы.
+Следовательно, смещение от центра finder до внешнего края по каждой оси равно $F/2$.
+
+Определяются единичные направления:
+\[
+	u=\frac{c_{TR}-c_{TL}}{\|c_{TR}-c_{TL}\|},\qquad
+	v=\frac{c_{BL}-c_{TL}}{\|c_{BL}-c_{TL}\|}.
+\]
+Для повышения устойчивости выполняется ортогонализация $v$ относительно $u$.
+
+Сторона QR оценивается как:
+\[
+	S_x \approx \|c_{TR}-c_{TL}\| + F,\quad
+	S_y \approx \|c_{BL}-c_{TL}\| + F,\quad
+	S=\frac{S_x+S_y}{2}.
+\]
+
+Верхняя левая вершина границы:
+\[
+	q_{TL}=c_{TL}-\frac{F}{2}u-\frac{F}{2}v,
+\]
+остальные вершины:
+\[
+	q_{TR}=q_{TL}+Su,\quad
+	q_{BL}=q_{TL}+Sv,\quad
+	q_{BR}=q_{TL}+Su+Sv.
+\]
+
+\subsubsection{Шаг 7. Формирование результата и сохранение}\label{sec:solution:step7}
+Полученный четырёхугольник упорядочивается в порядке \texttt{TL--TR--BR--BL} и проверяется на корректность (точки должны лежать в пределах изображения).
+Далее результат сохраняется в JSON-файл в формате, указанном выше.
+
+\begin{figure}[!h]
+	\begin{center}
+		\includegraphics[width=0.45\textwidth]{res.png}
+		\caption{Визуализация локализации QR-кода}
+		\label{nmp20}
+	\end{center}
+\end{figure}

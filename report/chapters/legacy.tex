@@ -1,11 +1,11 @@
 \newpage
 \begin{center}
-	\textbf{\large 5. Инструкция по установке}
+	\textbf{\large 4. Инструкция по установке и использованию}
 \end{center}
-% \refstepcounter{chapter}
-\addcontentsline{toc}{chapter}{5. Инструкция по установке}
+\refstepcounter{chapter}
+\addcontentsline{toc}{chapter}{4. Инструкция по установке и использованию}
 
-\paragraph{Установка.}
+\subsubsection{Установка}
 Для сборки и запуска приложения требуется:
 \begin{itemize}
 	\item компилятор с поддержкой C++17;
@@ -25,7 +25,7 @@ git clone https://github.com/g0lubew-iv/qr-localizer
 cd qr-localizer
 \end{verbatim}
 
-\subsection*{Сборка (Linux/MacOS)}
+\subsubsection{Сборка (Linux/MacOS)}
 \paragraph{Шаг 1. Установка зависимостей.}
 Установите OpenCV и \texttt{nlohmann\_json} средствами пакетного менеджера вашей системы или с помощью менеджера зависимостей (например, vcpkg).
 При использовании Fedora Linux установка может быть выполнена командой:
@@ -50,7 +50,7 @@ cmake --build build --config Release
 cmake --install build
 \end{verbatim}
 
-\subsection*{Сборка (Windows)}
+\subsubsection{Сборка (Windows)}
 Сборка под Windows выполняется аналогично с использованием генератора Visual Studio.
 Общий подход к конфигурации/сборке/установке для CMake-проектов выполняется по следующей схеме:
 \begin{verbatim}
@@ -59,3 +59,32 @@ cmake --build build --config Release
 cmake --install build --config Release
 \end{verbatim}
 При использовании vcpkg необходимо дополнительно указать путь к toolchain-файлу \texttt{vcpkg.cmake} в параметре \verb|-DCMAKE_TOOLCHAIN_FILE=...|.
+
+\subsubsection{Обзор приложения}
+
+Консольное приложение предназначено для локализации QR-кода на входном изображении.
+В результате работы формируется JSON-файл в формате, совместимом с разметкой LabelMe: в нём сохраняются метаданные изображения и (при успешной локализации) один многоугольник, соответствующий области QR-кода.
+Полученный JSON может использоваться для:
+\begin{itemize}
+	\item сравнения результата алгоритма с эталонной ручной разметкой (Ground Truth);
+	\item визуальной проверки корректности локализации в инструментах, поддерживающих формат LabelMe;
+	\item последующей передачи вырезанного фрагмента на этап декодирования QR-кода.
+\end{itemize}
+
+\paragraph{Общий формат запуска:}
+\begin{verbatim}
+qr_localizer <image_path> --out <out.json> [--show] [--vis <out.png>]
+\end{verbatim}
+
+\paragraph{Обязательные аргументы:}
+\begin{itemize}
+	\item \verb|<image_path>| -- путь ко входному изображению.
+	\item \verb|--out <out.json>| -- путь к выходному JSON-файлу.
+\end{itemize}
+
+\paragraph{Опциональные флаги:}
+\begin{itemize}
+	\item \verb|--show| -- отображение окна с изображением и наложенным многоугольником области QR-кода.
+	      Окно создаётся с параметром \verb|cv::WINDOW_NORMAL|, что позволяет изменять его размер.
+	\item \verb|--vis <out.png>| -- сохранение изображения с отрисованным результатом локализации в указанный файл (например, \verb|./out/vis.png|).
+\end{itemize}

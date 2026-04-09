@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
 
     std::string imagePath = argv[1];
 
-    bool doShow = false;
+    bool doShow    = false;
     bool doSaveVis = false;
     std::string visPath;
 
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     }
 
     if (!haveOut) {
-        std::cerr << "Error: output json is not specified. Use --out <out.json>\n";
+        std::cerr << "Error: output json is not specified. Use --out <out.json>";
         return 1;
     }
 
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
 
     std::ofstream ofs(outJsonPath);
     if (!ofs) {
-        std::cerr << "Error: cannot open file for writing: " << outJsonPath << "\n";
+        std::cerr << "Error: cannot open file for writing: " << outJsonPath;
         return 2;
     }
     ofs << out.dump(2) << "\n";

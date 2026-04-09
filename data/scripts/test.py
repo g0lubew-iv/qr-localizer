@@ -16,29 +16,38 @@ def load_data(path: Path) -> dict:
 
 
 def run_localizer(exe: Path, img_path: Path, timeout=20.0):
-    p = subprocess.run(
-        [str(exe), str(img_path)], capture_output=True, text=True, timeout=timeout
-    )
-    out = (p.stdout or "").strip().splitlines()
-    if not out:
-        return False, None
+    import tempfile
 
-    head = out[0].strip().upper()
-    if "NOT" in head:
-        return False, None
-    if "FOUND" not in head:
-        return False, None
-    if len(out) < 5:
-        return False, None
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
 
-    pts = []
-    for i in range(1, 5):
-        parts = out[i].strip().split()
-        if len(parts) < 2:
+    try:
+        p = subprocess.run(
+            [str(exe), str(img_path), "--out", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        if not tmp_path.exists() or tmp_path.stat().st_size == 0:
             return False, None
-        pts.append((float(parts[0]), float(parts[1])))
 
-    return True, pts
+        with open(tmp_path, "r", encoding="utf-8") as f:
+            result = json.load(f)
+
+        shapes = result.get("shapes", [])
+        qr_shape = next((s for s in shapes if s.get("label") == "qr"), None)
+
+        if not qr_shape or len(qr_shape.get("points", [])) != 4:
+            return False, None
+
+        return True, [(float(x), float(y)) for x, y in qr_shape["points"]]
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, StopIteration):
+        return False, None
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def corner_errors_px_list(gt4, pred4):

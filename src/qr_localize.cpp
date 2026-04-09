@@ -315,31 +315,45 @@ std::optional<std::array<cv::Point2f, 4>> localizeQR(const cv::Mat& bgr) {
         return std::nullopt;
     }
     auto ft = *ftOpt;
-    float padFrac = 0.03f;
-    float padMin  = 1.0f;
 
-    cv::Point2f tl = ft.tl * (float) (1.0 / scale);
-    cv::Point2f tr = ft.tr * (float) (1.0 / scale);
-    cv::Point2f bl = ft.bl * (float) (1.0 / scale);
+    constexpr float numberModules           = 21.0f; // QR version 1 (21 modules)
+    constexpr float dCentersModules         = numberModules - 7.0f;
+    constexpr float fromCenterToEdgeModules = 3.5f;
 
-    float finderSize = ((ft.tlSize + ft.trSize + ft.blSize) / 3.0f) * (float)(1.0 / scale);
+    cv::Point2f tl = ft.tl * (float)(1.0 / scale);
+    cv::Point2f tr = ft.tr * (float)(1.0 / scale);
+    cv::Point2f bl = ft.bl * (float)(1.0 / scale);
 
-    cv::Point2f u = norma(tr - tl); // right
-    cv::Point2f v = norma(bl - tl); // down
+    cv::Point2f uRaw = tr - tl;
+    cv::Point2f vRaw = bl - tl;
 
-    float S  = 0.5f * (norm(tr - tl) + finderSize + norm(bl - tl) + finderSize);
+    float dx = cv::norm(uRaw);
+    float dy = cv::norm(vRaw);
+    if (dx < 1e-6f || dy < 1e-6f) {
+        return std::nullopt;
+    }
 
-    cv::Point2f TL = tl - u * (0.5f * finderSize) - v * (0.5f * finderSize);
-    cv::Point2f TR = TL + u * S;
-    cv::Point2f BL = TL + v * S;
-    cv::Point2f BR = TL + u * S + v * S;
+    cv::Point2f u = uRaw * (1.0f / dx);
+    cv::Point2f v = vRaw * (1.0f / dy);
 
-    float pad = std::max(padMin, padFrac * S);
+    /* optional: make v orthogonal to u
+    v = v - u * (u.dot(v));
+    float vn = cv::norm(v);
+    if (vn < 1e-6f) {
+        return std::nullopt;
+    }
+    v = v * (1.0f / vn); */
 
-    cv::Point2f TL2 = TL - u * pad - v * pad;
-    cv::Point2f TR2 = TR + u * pad - v * pad;
-    cv::Point2f BL2 = BL - u * pad + v * pad;
-    cv::Point2f BR2 = BR + u * pad + v * pad;
+    float mx = dx / dCentersModules;
+    float my = dy / dCentersModules;
+    float m  = 0.5f * (mx + my);
 
-    return orderQuad({TL2, TR2, BR2, BL2});
+    float off = fromCenterToEdgeModules * m;
+
+    cv::Point2f TL = tl - u * off - v * off;
+    cv::Point2f TR = tr + u * off - v * off;
+    cv::Point2f BL = bl - u * off + v * off;
+    cv::Point2f BR = TR + (BL - TL);
+
+    return orderQuad({TL, TR, BR, BL});
 }
